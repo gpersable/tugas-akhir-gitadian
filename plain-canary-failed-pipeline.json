@@ -1,0 +1,266 @@
+{
+  "name": "Canary Failed Pipeline",
+  "application": "sampleapp",
+  "keepWaitingPipelines": false,
+  "lastModifiedBy": "anonymous",
+  "limitConcurrent": true,
+  "parameterConfig": [],
+  "stages": [
+    {
+      "account": "gke-1-acct",
+      "cloudProvider": "kubernetes",
+      "manifestArtifactAccount": "docker-registry",
+      "manifests": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "metadata": {
+            "labels": {
+              "app": "sampleapp-canary",
+              "version": "canary"
+            },
+            "name": "sampleapp-canary",
+            "namespace": "sampleapp"
+          },
+          "spec": {
+            "replicas": 0,
+            "selector": {
+              "matchLabels": {
+                "app": "sampleapp",
+                "version": "canary"
+              }
+            },
+            "template": {
+              "metadata": {
+                "annotations": {
+                  "prometheus.io/scrape": "true",
+                  "prometheus.io/port": "8000"
+                },
+                "labels": {
+                  "app": "sampleapp",
+                  "version": "canary"
+                }
+              },
+              "spec": {
+                "containers": [
+                  {
+                    "env": [
+                      {
+                        "name": "SUCCESS_RATE",
+                        "valueFrom": {
+                          "configMapKeyRef": {
+                            "key": "SUCCESS_RATE",
+                            "name": "sampleapp-config-canary"
+                          }
+                        }
+                      }
+                    ],
+                    "image": "gcr.io/spinnaker-marketplace/sampleapp:latest",
+                    "name": "sampleapp",
+                    "ports": [
+                      {
+                        "containerPort": 8000
+                      },
+                      {
+                        "containerPort": 8080
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "metadata": {
+            "labels": {
+              "app": "sampleapp-baseline",
+              "version": "baseline"
+            },
+            "name": "sampleapp-baseline",
+            "namespace": "sampleapp"
+          },
+          "spec": {
+            "replicas": 0,
+            "selector": {
+              "matchLabels": {
+                "app": "sampleapp",
+                "version": "baseline"
+              }
+            },
+            "template": {
+              "metadata": {
+                "annotations": {
+                  "prometheus.io/scrape": "true",
+                  "prometheus.io/port": "8000"
+                },
+                "labels": {
+                  "app": "sampleapp",
+                  "version": "baseline"
+                }
+              },
+              "spec": {
+                "containers": [
+                  {
+                    "env": [
+                      {
+                        "name": "SUCCESS_RATE",
+                        "valueFrom": {
+                          "configMapKeyRef": {
+                            "key": "SUCCESS_RATE",
+                            "name": "sampleapp-config-prod"
+                          }
+                        }
+                      }
+                    ],
+                    "image": "gcr.io/spinnaker-marketplace/sampleapp:latest",
+                    "name": "sampleapp",
+                    "ports": [
+                      {
+                        "containerPort": 8000
+                      },
+                      {
+                        "containerPort": 8080
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "metadata": {
+            "labels": {
+              "app": "sampleapp"
+            },
+            "name": "sampleapp",
+            "namespace": "sampleapp"
+          },
+          "spec": {
+            "replicas": 10,
+            "selector": {
+              "matchLabels": {
+                "app": "sampleapp",
+                "version": "prod"
+              }
+            },
+            "template": {
+              "metadata": {
+                "annotations": {
+                  "prometheus.io/scrape": "true",
+                  "prometheus.io/port": "8000"
+                },
+                "labels": {
+                  "app": "sampleapp",
+                  "version": "prod"
+                }
+              },
+              "spec": {
+                "containers": [
+                  {
+                    "env": [
+                      {
+                        "name": "SUCCESS_RATE",
+                        "valueFrom": {
+                          "configMapKeyRef": {
+                            "key": "SUCCESS_RATE",
+                            "name": "sampleapp-config-prod"
+                          }
+                        }
+                      }
+                    ],
+                    "image": "gcr.io/spinnaker-marketplace/sampleapp:latest",
+                    "name": "sampleapp",
+                    "ports": [
+                      {
+                        "containerPort": 8000
+                      },
+                      {
+                        "containerPort": 8080
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "moniker": {
+        "app": "sampleapp"
+      },
+      "name": "Send 100% to old Prod",
+      "refId": "1",
+      "relationships": {
+        "loadBalancers": [],
+        "securityGroups": []
+      },
+      "requisiteStageRefIds": [],
+      "skipExpressionEvaluation": false,
+      "source": "text",
+      "trafficManagement": {
+        "enabled": false,
+        "options": {
+          "enableTraffic": false,
+          "services": []
+        }
+      },
+      "type": "deployManifest"
+    },
+    {
+      "account": "gke-1-acct",
+      "app": "sampleapp",
+      "cloudProvider": "kubernetes",
+      "kinds": ["deployment"],
+      "labelSelectors": {
+        "selectors": [
+          {
+            "key": "app",
+            "kind": "EQUALS",
+            "values": ["sampleapp-baseline"]
+          }
+        ]
+      },
+      "location": "sampleapp",
+      "mode": "label",
+      "name": "Delete Baseline",
+      "options": {
+        "cascading": true
+      },
+      "refId": "2",
+      "requisiteStageRefIds": ["1"],
+      "type": "deleteManifest"
+    },
+    {
+      "account": "gke-1-acct",
+      "app": "sampleapp",
+      "cloudProvider": "kubernetes",
+      "kinds": ["deployment"],
+      "labelSelectors": {
+        "selectors": [
+          {
+            "key": "app",
+            "kind": "EQUALS",
+            "values": ["sampleapp-canary"]
+          }
+        ]
+      },
+      "location": "sampleapp",
+      "mode": "label",
+      "name": "Delete Canary",
+      "options": {
+        "cascading": true
+      },
+      "refId": "3",
+      "requisiteStageRefIds": ["1"],
+      "type": "deleteManifest"
+    }
+  ],
+  "triggers": [],
+  "updateTs": "1567911109240"
+}
