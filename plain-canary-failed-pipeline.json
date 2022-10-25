@@ -1,5 +1,5 @@
 {
-  "name": "Canary Failed Pipeline",
+  "name": "Plain Canary Failed Pipeline",
   "application": "sampleapp",
   "keepWaitingPipelines": false,
   "lastModifiedBy": "anonymous",
