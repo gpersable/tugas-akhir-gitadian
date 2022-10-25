@@ -1,0 +1,180 @@
+# Setting up
+export PROJECT_ID=PROJECT_ID
+gcloud config set project PROJECT_ID
+
+
+export ZONE=ZONE
+gcloud config set compute/zone ZONE
+
+
+# Deploying Spinnaker on a GKE cluster
+mkdir -p $HOME/cloudshell_open
+cd $HOME/cloudshell_open
+git clone \
+https://github.com/GoogleCloudPlatform/spinnaker-for-gcp.git
+cd spinnaker-for-gcp
+
+
+git config --global user.name $USER
+git config --global user.email $(gcloud config get-value account)
+
+
+$HOME/cloudshell_open/spinnaker-for-gcp/scripts/install/setup_properties.sh
+
+
+$HOME/cloudshell_open/spinnaker-for-gcp/scripts/install/setup.sh
+
+
+source $HOME/.bashrc
+
+
+# Creating and setting up GKE clusters for your deployments
+gcloud container clusters create gke-1 \
+    --enable-ip-alias \
+    --machine-type n1-standard-2 \
+    --enable-stackdriver-kubernetes \
+    --num-nodes 4
+
+
+gcloud container clusters get-credentials spinnaker-1 \
+    --zone ZONE --project PROJECT_ID
+
+gcloud container clusters get-credentials gke-1 \
+    --zone ZONE --project PROJECT_ID
+
+
+export SPINNAKER_CTX=gke_PROJECT_ID_ZONE_spinnaker-1
+export GKE_CTX=gke_PROJECT_ID_ZONE_gke-1
+
+
+kubectl create clusterrolebinding user-admin-binding \
+    --clusterrole=cluster-admin --user=$(gcloud config get-value account) \
+    --context ${SPINNAKER_CTX}
+
+kubectl create clusterrolebinding user-admin-binding \
+    --clusterrole=cluster-admin --user=$(gcloud config get-value account) \
+    --context ${GKE_CTX}
+
+
+cd $HOME
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.10.2 \
+sh -
+
+
+cd $HOME/istio-1.10.2
+export PATH=$PWD/bin:$PATH
+
+
+istioctl install --set profile=demo \
+    --set values.telemetry.enabled=true \
+    --set values.telemetry.v2.enabled=true \
+    --set values.telemetry.v2.stackdriver.enabled=true \
+    --context ${GKE_CTX}
+
+
+kubectl get pods -n istio-system --context $GKE_CTX
+
+
+kubectl --context=${GKE_CTX} apply -f https://raw.githubusercontent.com/istio/istio/release-1.10/samples/addons/kiali.yaml
+
+kubectl --context=${GKE_CTX} apply -f https://raw.githubusercontent.com/istio/istio/release-1.10/samples/addons/prometheus.yaml
+
+
+# Configuring Spinnaker and adding the GKE-1 cluster
+$HOME/cloudshell_open/spinnaker-for-gcp/scripts/manage/add_gke_account.sh
+
+
+kubectx ${SPINNAKER_CTX}
+hal config canary google enable
+hal config canary google account add kayenta-tutorial \
+    --project PROJECT_ID
+hal config canary google edit --stackdriver-enabled=true
+$HOME/cloudshell_open/spinnaker-for-gcp/scripts/manage/push_and_apply.sh
+
+
+watch 'kubectl get pods -n spinnaker | grep clouddriver'
+
+
+$HOME/cloudshell_open/spinnaker-for-gcp/scripts/manage/connect_unsecured.sh
+
+
+spin application save --application-name sampleapp \
+                      --owner-email example@example.com \
+                      --cloud-providers kubernetes \
+                      --gate-endpoint http://localhost:8080/gate
+
+
+# Creating pipelines
+cd $HOME
+wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/prod-deploy-pipeline.json
+spin pipeline save --file prod-deploy-pipeline.json
+
+
+wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/canary-failed-pipeline.json
+spin pipeline save --file canary-failed-pipeline.json
+
+
+wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/plain-canary-failed-pipeline.json
+spin pipeline save --file plain-canary-failed-pipeline.json
+
+
+export CANARY_CONFIG_ID=$(spin canary canary-configs list \
+| jq -r '.[0].id')
+echo $CANARY_CONFIG_ID
+
+
+export PROD_DEPLOY_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Prod Deploy Pipeline' | jq -r '.id')
+export CANARY_FAILED_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Canary Failed Pipeline' | jq -r '.id')
+export PLAIN_CANARY_FAILED_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Plain Canary Failed Pipeline' | jq -r '.id')
+
+echo $PROD_DEPLOY_PIPELINE_ID
+echo $CANARY_FAILED_PIPELINE_ID
+echo $PLAIN_CANARY_FAILED_PIPELINE_ID
+
+
+wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/canary-deploy-pipeline.json
+jq '(.stages[] | select(.refId == "9") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] |     select(.refId == "8") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] | select(.refId == "32") |     .pipeline) |= env.CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "33") | .pipeline) |=     env.CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "36") | .pipeline) |= env.CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "16") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID | (.stages[] | select(.refId == "18") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID | (.stages[] | select(.refId == "20") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID' canary-deploy-pipeline.json > updated-canary-deploy-pipeline.json
+spin pipeline save --file updated-canary-deploy-pipeline.json
+
+wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/plain-canary-deploy-pipeline.json
+jq '(.stages[] | select(.refId == "9") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] |     select(.refId == "8") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] | select(.refId == "32") |     .pipeline) |= env.PLAIN_CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "33") | .pipeline) |=     env.PLAIN_CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "36") | .pipeline) |= env.PLAIN_CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "16") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID | (.stages[] | select(.refId == "18") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID | (.stages[] | select(.refId == "20") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID' plain-canary-deploy-pipeline.json > updated-plain-canary-deploy-pipeline.json
+spin pipeline save --file updated-canary-deploy-pipeline.json
+
+
+export CANARY_DEPLOY_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Canary Deploy Pipeline' | jq -r '.id')
+export PLAIN_CANARY_DEPLOY_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Plain Canary Deploy Pipeline' | jq -r '.id')
+echo $CANARY_DEPLOY_PIPELINE_ID
+echo $PLAIN_CANARY_DEPLOY_PIPELINE_ID
+
+
+wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/trigger-pipeline.json
+jq '(.stages[] | select(.refId == "3") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] |     select(.refId == "4") | .pipeline) |= env.CANARY_DEPLOY_PIPELINE_ID' trigger-pipeline.json > updated-trigger-deploy-pipeline.json
+spin pipeline save --file updated-trigger-deploy-pipeline.json
+
+wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/plain-trigger-pipeline.json
+jq '(.stages[] | select(.refId == "3") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] |     select(.refId == "4") | .pipeline) |= env.PLAIN_CANARY_DEPLOY_PIPELINE_ID' plain-trigger-pipeline.json > updated-plain-trigger-deploy-pipeline.json
+spin pipeline save --file updated-plain-trigger-deploy-pipeline.json
+
+
+# Deploying the initial production release
+## Manually trigger the Prod Deploy pipeline
+kubectl --context ${GKE_CTX} -n sampleapp get all
+
+
+## Generate traffic to the sampleapp application
+kubectl --context ${GKE_CTX} -n sampleapp run curler \
+    --image=radial/busyboxplus -- /bin/sh -c \
+"while true; do curl -sS --max-time 3 http://sampleapp:8080; done"
+
+
+kubectl --context ${GKE_CTX} -n sampleapp get pods
+
+
+kubectl --context ${GKE_CTX} -n sampleapp logs -f \
+$(kubectl --context ${GKE_CTX} -n sampleapp get pods -l run=curler \
+-o=jsonpath='{.items[0].metadata.name}') -c curler
+
+
+## View the service mesh in Kiali
+kubectl port-forward svc/kiali 20001:20001 -n istio-system --context ${GKE_CTX} >> /dev/null &
+
