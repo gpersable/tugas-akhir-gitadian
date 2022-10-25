@@ -158,6 +158,11 @@ wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/plain
 jq '(.stages[] | select(.refId == "3") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] |     select(.refId == "4") | .pipeline) |= env.PLAIN_CANARY_DEPLOY_PIPELINE_ID' plain-trigger-pipeline.json > updated-plain-trigger-deploy-pipeline.json
 spin pipeline save --file updated-plain-trigger-deploy-pipeline.json
 
+export TRIGGER_DEPLOY_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Trigger Deploy Pipeline' | jq -r '.id')
+export PLAIN_TRIGGER_DEPLOY_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Plain Trigger Deploy Pipeline' | jq -r '.id')
+echo $TRIGGER_DEPLOY_PIPELINE_ID
+echo $PLAIN_TRIGGER_DEPLOY_PIPELINE_ID
+
 
 # Deploying the initial production release
 ## Manually trigger the Prod Deploy pipeline
