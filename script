@@ -1,10 +1,10 @@
 # Setting up
-export PROJECT_ID=PROJECT_ID
-gcloud config set project PROJECT_ID
+export PROJECT_ID=$(gcloud config get-value project)
+gcloud config set project $PROJECT_ID
 
 
-export ZONE=ZONE
-gcloud config set compute/zone ZONE
+export ZONE=us-east1-d
+gcloud config set compute/zone $ZONE
 
 
 # Deploying Spinnaker on a GKE cluster
@@ -37,14 +37,14 @@ gcloud container clusters create gke-1 \
 
 
 gcloud container clusters get-credentials spinnaker-1 \
-    --zone ZONE --project PROJECT_ID
+    --zone $ZONE --project $PROJECT_ID
 
 gcloud container clusters get-credentials gke-1 \
-    --zone ZONE --project PROJECT_ID
+    --zone $ZONE --project $PROJECT_ID
 
 
-export SPINNAKER_CTX=gke_PROJECT_ID_ZONE_spinnaker-1
-export GKE_CTX=gke_PROJECT_ID_ZONE_gke-1
+export SPINNAKER_CTX=gke_${PROJECT_ID}_${ZONE}_spinnaker-1
+export GKE_CTX=gke_${PROJECT_ID}_${ZONE}_gke-1
 
 
 kubectl create clusterrolebinding user-admin-binding \
@@ -103,6 +103,9 @@ spin application save --application-name sampleapp \
                       --cloud-providers kubernetes \
                       --gate-endpoint http://localhost:8080/gate
 
+                      
+# istio.io/service/server/request_count
+# metric.labels.response_code = "500" AND resource.label.pod_name = starts_with("${scope}")
 
 # Creating pipelines
 cd $HOME
@@ -138,7 +141,7 @@ spin pipeline save --file updated-canary-deploy-pipeline.json
 
 wget https://raw.githubusercontent.com/gpersable/tugas-akhir-gitadian/main/plain-canary-deploy-pipeline.json
 jq '(.stages[] | select(.refId == "9") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] |     select(.refId == "8") | .pipeline) |= env.PROD_DEPLOY_PIPELINE_ID | (.stages[] | select(.refId == "32") |     .pipeline) |= env.PLAIN_CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "33") | .pipeline) |=     env.PLAIN_CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "36") | .pipeline) |= env.PLAIN_CANARY_FAILED_PIPELINE_ID | (.stages[] | select(.refId == "16") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID | (.stages[] | select(.refId == "18") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID | (.stages[] | select(.refId == "20") | .canaryConfig.canaryConfigId) |= env.CANARY_CONFIG_ID' plain-canary-deploy-pipeline.json > updated-plain-canary-deploy-pipeline.json
-spin pipeline save --file updated-canary-deploy-pipeline.json
+spin pipeline save --file updated-plain-canary-deploy-pipeline.json
 
 
 export CANARY_DEPLOY_PIPELINE_ID=$(spin pipeline get -a sampleapp -n 'Canary Deploy Pipeline' | jq -r '.id')
