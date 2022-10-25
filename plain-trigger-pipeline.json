@@ -1,5 +1,5 @@
 {
-  "name": "Trigger Deploy Pipeline",
+  "name": "Plain Trigger Deploy Pipeline",
   "application": "sampleapp",
   "keepWaitingPipelines": false,
   "lastModifiedBy": "anonymous",
