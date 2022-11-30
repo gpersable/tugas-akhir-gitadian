@@ -1,0 +1,36 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: sampleapp-baseline
+    version: baseline
+  name: sampleapp-baseline
+  namespace: sampleapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sampleapp
+      version: baseline
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+      labels:
+        app: sampleapp
+        version: baseline
+    spec:
+      containers:
+        - env:
+            - name: SUCCESS_RATE
+              valueFrom:
+                configMapKeyRef:
+                  key: SUCCESS_RATE
+                  name: sampleapp-config-prod
+          image: gcr.io/spinnaker-marketplace/sampleapp:latest
+          name: sampleapp
+          ports:
+            - containerPort: 8000
+            - containerPort: 8080

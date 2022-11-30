@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+data:
+  SUCCESS_RATE: "${ parameters.successRate }"
+kind: ConfigMap
+metadata:
+  labels:
+    app: sampleapp-canary
+  name: sampleapp-config-canary
+  namespace: sampleapp

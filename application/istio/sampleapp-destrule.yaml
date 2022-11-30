@@ -1,0 +1,18 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: sampleapp-destination-rule
+  namespace: sampleapp
+spec:
+  host: sampleapp
+  subsets:
+    - labels:
+        version: prod
+      name: prod
+    - labels:
+        version: baseline
+      name: baseline
+    - labels:
+        version: canary
+      name: canary
