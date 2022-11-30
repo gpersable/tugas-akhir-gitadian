@@ -1,0 +1,12 @@
+halyard:
+  halconfig:
+    directory: /home/USER/.hal
+
+spinnaker:
+  artifacts:
+    debianRepository:
+    dockerRegistry:
+    googleImageProject:
+  config:
+    input:
+      bucket: halconfig
